@@ -94,6 +94,10 @@ function App() {
     } catch (err) {
 
       console.log(err);
+
+      alert(
+        "Error processing attendance"
+      );
     }
 
     setLoading(false);
@@ -104,143 +108,234 @@ function App() {
     <div
       style={{
         fontFamily: "Arial",
-        padding: "20px",
-        background: "#f5f5f5",
-        minHeight: "100vh"
+        background: "#f4f6f9",
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: "30px"
       }}
     >
 
-      <h1>
-        Smart Classroom Attendance
-      </h1>
-
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        width="700"
+      <div
         style={{
-          borderRadius: "10px",
-          border: "3px solid black"
-        }}
-      />
-
-      <br /><br />
-
-      <button
-        onClick={captureAttendance}
-        style={{
-          padding: "15px 30px",
-          fontSize: "18px",
-          cursor: "pointer"
+          width: "100%",
+          maxWidth: "900px",
+          background: "white",
+          padding: "30px",
+          borderRadius: "20px",
+          boxShadow: "0px 4px 20px rgba(0,0,0,0.1)",
+          textAlign: "center"
         }}
       >
 
-        {
-          loading
-          ?
-          "Processing..."
-          :
-          "Capture Attendance"
-        }
+        <h1
+          style={{
+            marginBottom: "25px",
+            color: "#222"
+          }}
+        >
+          Smart Classroom Attendance
+        </h1>
 
-      </button>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          width="700"
+          style={{
+            width: "100%",
+            maxWidth: "700px",
+            borderRadius: "15px",
+            border: "4px solid #222",
+            marginBottom: "20px"
+          }}
+        />
 
-      <h2>
-        Present Students: {count}
-      </h2>
-
-      <table
-        border="1"
-        cellPadding="10"
-        style={{
-          background: "white"
-        }}
-      >
-
-        <thead>
-
-          <tr>
-
-            <th>
-              Student Name
-            </th>
-
-          </tr>
-
-        </thead>
-
-        <tbody>
-
-          {
-            students.map(
-              (
-                s,
-                i
-              ) => (
-
-                <tr key={i}>
-
-                  <td>
-                    {s}
-                  </td>
-
-                </tr>
-              )
-            )
-          }
-
-        </tbody>
-
-      </table>
-
-      <br />
-
-      <a
-        href={`${API}/static/attendance.csv`}
-        download
-      >
+        <br />
 
         <button
+          onClick={captureAttendance}
           style={{
-            padding: "10px 20px",
-            fontSize: "16px"
+            padding: "14px 28px",
+            fontSize: "18px",
+            border: "none",
+            borderRadius: "10px",
+            background: "#2563eb",
+            color: "white",
+            cursor: "pointer",
+            fontWeight: "bold",
+            marginBottom: "25px",
+            transition: "0.2s"
           }}
         >
 
-          Download Attendance CSV
+          {
+            loading
+            ?
+            "Processing..."
+            :
+            "Capture Attendance"
+          }
 
         </button>
 
-      </a>
+        <h2
+          style={{
+            color: "#111"
+          }}
+        >
+          Present Students: {count}
+        </h2>
 
-      <br /><br />
+        <div
+          style={{
+            overflowX: "auto",
+            marginTop: "20px"
+          }}
+        >
 
-      <h2>
-        Detection Result
-      </h2>
-
-      {
-        resultImage &&
-        (
-          <img
-            src={resultImage}
-            alt="result"
-            width="700"
+          <table
             style={{
-              border: "3px solid green",
-              borderRadius: "10px"
+              margin: "0 auto",
+              borderCollapse: "collapse",
+              width: "100%",
+              maxWidth: "500px",
+              background: "white"
             }}
-          />
-        )
-      }
+          >
 
-      <canvas
-        ref={canvasRef}
-        style={{
-          display: "none"
-        }}
-      />
+            <thead>
+
+              <tr
+                style={{
+                  background: "#2563eb",
+                  color: "white"
+                }}
+              >
+
+                <th
+                  style={{
+                    padding: "12px",
+                    border: "1px solid #ddd"
+                  }}
+                >
+                  Student Name
+                </th>
+
+              </tr>
+
+            </thead>
+
+            <tbody>
+
+              {
+                students.length > 0
+                ?
+                students.map(
+                  (
+                    s,
+                    i
+                  ) => (
+
+                    <tr key={i}>
+
+                      <td
+                        style={{
+                          padding: "12px",
+                          border: "1px solid #ddd"
+                        }}
+                      >
+                        {s}
+                      </td>
+
+                    </tr>
+                  )
+                )
+                :
+                (
+                  <tr>
+
+                    <td
+                      style={{
+                        padding: "12px",
+                        border: "1px solid #ddd"
+                      }}
+                    >
+                      No students detected
+                    </td>
+
+                  </tr>
+                )
+              }
+
+            </tbody>
+
+          </table>
+
+        </div>
+
+        <br />
+
+        <a
+          href={`${API}/download`}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            textDecoration: "none"
+          }}
+        >
+
+          <button
+            style={{
+              padding: "12px 24px",
+              fontSize: "16px",
+              border: "none",
+              borderRadius: "10px",
+              background: "#16a34a",
+              color: "white",
+              cursor: "pointer",
+              fontWeight: "bold"
+            }}
+          >
+
+            Download Attendance CSV
+
+          </button>
+
+        </a>
+
+        <br /><br />
+
+        <h2>
+          Detection Result
+        </h2>
+
+        {
+          resultImage &&
+          (
+            <img
+              src={resultImage}
+              alt="result"
+              style={{
+                width: "100%",
+                maxWidth: "700px",
+                border: "4px solid #16a34a",
+                borderRadius: "15px",
+                marginTop: "15px"
+              }}
+            />
+          )
+        }
+
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: "none"
+          }}
+        />
+
+      </div>
 
     </div>
   );
