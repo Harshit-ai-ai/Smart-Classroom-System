@@ -9,8 +9,9 @@ from face_engine import recognize
 from attendance_db import save_attendance
 
 app = FastAPI()
+
 app.mount(
-    "/",
+    "/static",
     StaticFiles(directory="."),
     name="static"
 )
@@ -32,7 +33,7 @@ class AttendanceRequest(BaseModel):
 @app.get("/download")
 def download_csv():
     return FileResponse(
-        "static/attendance.csv",
+        "attendance.csv",
         media_type="text/csv",
         filename="attendance.csv"
     )
@@ -108,3 +109,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=port
     )
+
+
+    
