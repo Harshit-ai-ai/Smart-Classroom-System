@@ -279,6 +279,8 @@ def recognize(base64_image):
             cv2.COLOR_RGB2BGR
         )
 
+        os.makedirs("static", exist_ok=True)
+
         cv2.imwrite(
             "static/result.jpg",
             image

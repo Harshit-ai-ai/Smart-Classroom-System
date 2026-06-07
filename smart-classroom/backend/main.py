@@ -10,6 +10,8 @@ from attendance_db import save_attendance
 
 app = FastAPI()
 
+os.makedirs("static", exist_ok=True)
+
 app.mount(
     "/static",
     StaticFiles(directory="."),
