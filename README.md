@@ -50,6 +50,8 @@ The system provides a comprehensive React-based UI for both teachers and student
 *   **Student Profile Lookup:** Search for a student name to view their complete attendance history, attendance rate, and biometric scores.
 *   **Personal Excel Reports:** Students can download their own localized `.xlsx` attendance history for their records.
 
+![Student Tab](docs/screenshots/student_tab.png)
+
 ---
 
 ## The 10 Novel Modules
