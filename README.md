@@ -309,6 +309,37 @@ graph TB
 
 ---
 
+## Enterprise Compliance & Data Privacy (FERPA / GDPR)
+
+A critical requirement for university deployment is strict adherence to student data privacy laws (FERPA in the US, GDPR in Europe). The CSTPE architecture enforces privacy by design:
+1. **No Raw Image Retention:** The edge gateways and cloud backend **never save raw images** of students. Video frames are held in volatile RAM for milliseconds, converted into irreversible 128-dimensional numerical vectors (embeddings), and immediately discarded.
+2. **Cryptographic Storage:** The `encodings.pkl` database only stores mathematical vectors. Even if the database is breached, it is impossible to reverse-engineer a student's face from the numerical hash.
+3. **Zero-Knowledge Proofs:** Attendance reports generated for the university registrar use ZK-Pedersen commitments, proving a student was present for the required duration without exposing the granular, second-by-second tracking logs.
+
+---
+
+## Disaster Recovery & Backup Strategy
+
+For a 24x7x365 production system, data loss is unacceptable.
+1. **Persistent Cloud Volumes:** The SQLite `attendance.db` and biometric databases are strictly routed to a persistent `/data` volume mount on Render, ensuring data survives container restarts and OS patching.
+2. **Automated S3 Snapshots:** The system is architected to support automated CRON jobs that snapshot the SQLite database to an AWS S3 bucket daily at 03:00 AM.
+3. **Edge Resilience:** If the university network drops, the `cctv_edge_client.py` utilizes a local SQLite write-ahead queue to buffer attendance events locally. When the internet is restored, it bulk-syncs the buffered events to the cloud.
+
+---
+
+## Hardware Bill of Materials (BOM)
+
+To replicate this architecture across a campus, the following hardware specifications are recommended:
+
+| Component | Minimum Specification | Recommended Enterprise Specification |
+| :--- | :--- | :--- |
+| **CCTV Camera** | 1080p, 15 FPS, RTSP Support, H.264 | 4K (8MP), 30 FPS, PoE, H.265 (e.g., Axis or Hikvision) |
+| **Edge Gateway Node** (For Topology C) | Raspberry Pi 4 (4GB RAM) | Intel NUC 12 Pro (i5) or NVIDIA Jetson Orin Nano |
+| **Network** | 10 Mbps Uplink per room | 100 Mbps Dedicated VLAN |
+| **Cloud Backend Compute** | 1 CPU, 1 GB RAM (Docker) | 2 Dedicated vCPUs, 4 GB RAM (Render / AWS ECS) |
+
+---
+
 ## Test Results
 
 All 53 automated integration tests pass across all 10 modules:
