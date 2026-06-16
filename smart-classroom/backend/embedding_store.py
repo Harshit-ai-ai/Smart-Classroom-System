@@ -9,7 +9,9 @@ import numpy as np
 import json
 import os
 
-DB_FILE = os.path.join(os.path.dirname(__file__), "attendance.db")
+DATA_DIR = os.getenv("DATA_DIR", "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_FILE = os.path.join(DATA_DIR, "attendance.db")
 
 
 def init_embedding_table():

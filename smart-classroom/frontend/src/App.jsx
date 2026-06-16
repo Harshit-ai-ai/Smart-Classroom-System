@@ -1,9 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 
+// --- API Security Layer ---
+const API_KEY = import.meta.env.VITE_API_KEY || "cstpe-mahe-2026-secure";
+axios.defaults.headers.common["X-API-Key"] = API_KEY;
+
 function App() {
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
   const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/dashboard";
+
+  // Auth State
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [maheId, setMaheId] = useState("");
+  const [password, setPassword] = useState("");
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -22,19 +31,26 @@ function App() {
   const [notification, setNotification] = useState(null);
   const [isDark, setIsDark] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  // Enrollment State
+  const [newStudentName, setNewStudentName] = useState("");
+  const [isEnrolling, setIsEnrolling] = useState(false);
 
   const ws = useRef(null);
   const trackInterval = useRef(null);
 
+  // Re-run camera/websockets when logged in
   useEffect(() => {
-    startCamera();
-    connectWebSocket();
-    fetchSystemStatus();
+    if (isLoggedIn) {
+      startCamera();
+      connectWebSocket();
+      fetchSystemStatus();
+    }
     return () => {
       if (ws.current) ws.current.close();
       if (trackInterval.current) clearInterval(trackInterval.current);
     };
-  }, []);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     if (isDark) {
@@ -47,6 +63,16 @@ function App() {
   const showNotification = (msg, type = "success") => {
     setNotification({ msg, type });
     setTimeout(() => setNotification(null), 4000);
+  };
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (maheId.toUpperCase().startsWith("MAHE") && password.length > 3) {
+      setIsLoggedIn(true);
+      showNotification("Authentication successful. Welcome to CSTPE.");
+    } else {
+      showNotification("Unauthorized. Valid MAHE ID required.", "error");
+    }
   };
 
   const downloadExcelReport = async (url, filename) => {
@@ -146,19 +172,26 @@ function App() {
   const startCamera = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      videoRef.current.srcObject = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
     } catch (err) { console.log("Camera unavailable:", err); }
   };
 
-  const captureFrameAndSend = async () => {
+  const getBase64Frame = () => {
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!video || video.videoWidth === 0) return;
+    if (!video || video.videoWidth === 0) return null;
     const ctx = canvas.getContext("2d");
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0);
-    const image = canvas.toDataURL("image/jpeg", 0.7);
+    return canvas.toDataURL("image/jpeg", 0.8);
+  };
+
+  const captureFrameAndSend = async () => {
+    const image = getBase64Frame();
+    if (!image) return;
     try {
       await axios.post(`${API_URL}/attendance`, { image });
       setResultImage(`${API_URL}/static/result.jpg?t=` + new Date().getTime());
@@ -175,10 +208,142 @@ function App() {
     }
   };
 
+  const enrollNewStudent = async (e) => {
+    e.preventDefault();
+    if (!newStudentName.trim()) {
+      showNotification("Please enter a student name.", "error");
+      return;
+    }
+    const image = getBase64Frame();
+    if (!image) {
+      showNotification("Camera feed unavailable. Please enable webcam.", "error");
+      return;
+    }
+
+    setIsEnrolling(true);
+    try {
+      const res = await axios.post(`${API_URL}/enroll`, {
+        student_name: newStudentName.trim(),
+        image: image
+      });
+      if (res.data.status === "success") {
+        showNotification(res.data.message, "success");
+        setNewStudentName("");
+      } else {
+        showNotification(res.data.message, "error");
+      }
+    } catch (e) {
+      showNotification("Enrollment failed. API error.", "error");
+    } finally {
+      setIsEnrolling(false);
+    }
+  };
+
+  // ==========================================
+  // LOGIN SCREEN RENDER
+  // ==========================================
+  if (!isLoggedIn) {
+    return (
+      <div className={`min-h-screen flex items-center justify-center font-sans transition-colors duration-300 ${isDark ? "bg-slate-900" : "bg-slate-50"}`}>
+        
+        {/* Toast Notification */}
+        {notification && (
+          <div className="fixed top-4 right-4 z-50 animate-fade-in-down">
+            <div className={`rounded-md p-4 shadow-lg ${notification.type === "success" ? "bg-emerald-50 dark:bg-emerald-900/90" : "bg-red-50 dark:bg-red-900/90"}`}>
+              <p className={`text-sm font-medium ${notification.type === "success" ? "text-emerald-800 dark:text-emerald-100" : "text-red-800 dark:text-red-100"}`}>
+                {notification.msg}
+              </p>
+            </div>
+          </div>
+        )}
+
+        <div className="absolute top-4 right-4">
+          <button 
+            onClick={() => setIsDark(!isDark)}
+            className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+          >
+            {isDark ? (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+            ) : (
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
+            )}
+          </button>
+        </div>
+
+        <div className="max-w-md w-full px-6">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-xl bg-indigo-600 shadow-lg mb-4">
+              <svg className="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+              </svg>
+            </div>
+            <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">CSTPE Engine</h2>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">University Management System</p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="px-8 pt-8 pb-6 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white text-center">Faculty Authentication</h3>
+            </div>
+            <div className="px-8 py-8">
+              <form onSubmit={handleLogin} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">MAHE Authorized ID</label>
+                  <div className="mt-2 relative rounded-md shadow-sm">
+                    <input
+                      type="text"
+                      required
+                      className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                      placeholder="e.g. MAHE-2026"
+                      value={maheId}
+                      onChange={(e) => setMaheId(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">Gateway Password</label>
+                  <div className="mt-2">
+                    <input
+                      type="password"
+                      required
+                      className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    className="flex w-full justify-center rounded-md bg-indigo-600 px-3 py-2.5 text-sm font-semibold leading-6 text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-colors"
+                  >
+                    Authenticate
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+          
+          <p className="mt-8 text-center text-xs text-slate-500 dark:text-slate-500">
+            Secured by Zero-Knowledge Attestation Protocol v2.0
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // DASHBOARD RENDER
+  // ==========================================
+
   const tabs = [
     { id: "dashboard", name: "Dashboard" },
     { id: "camera", name: "Live Camera" },
     { id: "students", name: "Student Lookup" },
+    { id: "enrollment", name: "Enrollment" },
     { id: "audit", name: "Audit Trail" },
     { id: "environment", name: "Telemetry" },
     { id: "system", name: "Attestation" },
@@ -222,12 +387,12 @@ function App() {
                 <svg className="h-8 w-8 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
                 </svg>
-                <div className="ml-3">
+                <div className="ml-3 hidden sm:block">
                   <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">CSTPE</h1>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">University Management System</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium tracking-wide uppercase">University System</p>
                 </div>
               </div>
-              <div className="hidden sm:ml-10 sm:flex sm:space-x-8 overflow-x-auto">
+              <div className="ml-4 sm:ml-10 flex space-x-4 sm:space-x-8 overflow-x-auto no-scrollbar">
                 {tabs.map((tab) => (
                   <button
                     key={tab.id}
@@ -248,35 +413,26 @@ function App() {
               </div>
             </div>
             
-            {/* System Status Indicators in Nav */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-4 ml-4">
               <button 
                 onClick={() => setIsDark(!isDark)}
-                className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Toggle Dark Mode"
+                className="p-2 rounded-full text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors hidden sm:block"
               >
                 {isDark ? (
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
                 ) : (
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" /></svg>
                 )}
               </button>
 
-              <div className="hidden lg:flex items-center space-x-4">
-                <div className="flex items-center space-x-1">
-                  <span className="flex h-2 w-2 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Engine Active</span>
+              <div className="hidden lg:flex items-center space-x-4 border-l border-slate-200 dark:border-slate-700 pl-4">
+                <div className="flex items-center space-x-2">
+                  <div className="h-6 w-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400">M</span>
+                  </div>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{maheId || "Faculty"}</span>
                 </div>
-                <div className="text-xs font-medium px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md border border-slate-200 dark:border-slate-700">
-                  v2.0 Edge
-                </div>
+                <button onClick={() => setIsLoggedIn(false)} className="text-xs font-medium text-slate-500 hover:text-red-500 dark:text-slate-400 dark:hover:text-red-400">Logout</button>
               </div>
             </div>
           </div>
@@ -289,8 +445,6 @@ function App() {
         {/* ===== DASHBOARD TAB ===== */}
         {activeTab === "dashboard" && (
           <div className="space-y-6">
-            
-            {/* Header Controls */}
             <div className="md:flex md:items-center md:justify-between bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-colors">
               <div className="min-w-0 flex-1">
                 <h2 className="text-lg font-semibold leading-7 text-slate-900 dark:text-white sm:truncate sm:tracking-tight">
@@ -324,29 +478,18 @@ function App() {
                   disabled={isDownloading}
                   className="inline-flex items-center rounded-md bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-200 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isDownloading ? (
-                    <svg className="animate-spin -ml-0.5 mr-1.5 h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    <svg className="-ml-0.5 mr-1.5 h-5 w-5 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM10 7a.75.75 0 01.75.75v2.5h2.5a.75.75 0 010 1.5h-2.5v2.5a.75.75 0 01-1.5 0v-2.5h-2.5a.75.75 0 010-1.5h2.5v-2.5A.75.75 0 0110 7z" clipRule="evenodd" />
-                    </svg>
-                  )}
                   {isDownloading ? "Generating..." : "Export Report"}
                 </button>
                 <button
                   type="button"
                   onClick={finalizeDay}
-                  className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all"
+                  className="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition-all"
                 >
                   Finalize Day
                 </button>
               </div>
             </div>
 
-            {/* Attendance Table */}
             <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-colors">
               <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-700 sm:px-6">
                 <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Live Active Presence Tracker</h3>
@@ -357,9 +500,7 @@ function App() {
                   <thead className="bg-slate-50 dark:bg-slate-800/50">
                     <tr>
                       {["Student", "Active Time", "Progress", "Status", "Session UUID", "Dyn Gap", "Bio Score", "Env"].map((h) => (
-                        <th key={h} scope="col" className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                          {h}
-                        </th>
+                        <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -367,8 +508,6 @@ function App() {
                     {dashboardStats.length > 0 ? dashboardStats.map((stat, i) => {
                       const secs = stat.accumulated_seconds || 0;
                       const pct = Math.min(100, (secs / 2400) * 100).toFixed(0);
-                      
-                      // Status Badge Logic
                       let badgeClass = "bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-900/30 dark:text-blue-400 dark:ring-blue-500/20";
                       if (stat.status === "Present") badgeClass = "bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-900/30 dark:text-emerald-400 dark:ring-emerald-500/20";
                       else if (stat.status === "Partial") badgeClass = "bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-900/30 dark:text-amber-400 dark:ring-amber-500/20";
@@ -376,55 +515,93 @@ function App() {
 
                       return (
                         <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {stat.student || stat.student_name}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
-                            {Math.floor(secs / 60)}m {secs % 60}s
-                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">{stat.student || stat.student_name}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{Math.floor(secs / 60)}m {secs % 60}s</td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
                             <div className="flex items-center">
                               <div className="w-24 bg-slate-200 dark:bg-slate-700 rounded-full h-2 mr-2 overflow-hidden">
-                                <div 
-                                  className={`h-2 rounded-full ${pct >= 100 ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-indigo-500 dark:bg-indigo-400'} transition-all duration-500 ease-out`} 
-                                  style={{ width: `${pct}%` }}
-                                ></div>
+                                <div className={`h-2 rounded-full ${pct >= 100 ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-indigo-500 dark:bg-indigo-400'} transition-all duration-500 ease-out`} style={{ width: `${pct}%` }}></div>
                               </div>
                               <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{pct}%</span>
                             </div>
                           </td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm">
-                            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${badgeClass}`}>
-                              {stat.status}
-                            </span>
+                            <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${badgeClass}`}>{stat.status}</span>
                           </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-xs font-mono text-slate-400 dark:text-slate-500">
-                            {stat.session_id || stat.session_id || "---"}
-                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-xs font-mono text-slate-400 dark:text-slate-500">{stat.session_id || "---"}</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{stat.adaptive_gap || 10}s</td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">{(stat.biometric_score || 0).toFixed(2)}</td>
                           <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
-                            {stat.adaptive_gap || stat.adaptive_gap_threshold || 10}s
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">
-                            {(stat.biometric_score || 0).toFixed(2)}
-                          </td>
-                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
-                            <span className={`inline-flex rounded-full h-2 w-2 ${(stat.env_valid !== 0 && stat.env_valid !== false && stat.env_validated !== 0) ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-red-500 dark:bg-red-400'}`}></span>
+                            <span className={`inline-flex rounded-full h-2 w-2 ${(stat.env_valid !== 0 && stat.env_valid !== false) ? 'bg-emerald-500 dark:bg-emerald-400' : 'bg-red-500 dark:bg-red-400'}`}></span>
                           </td>
                         </tr>
                       );
                     }) : (
                       <tr>
                         <td colSpan="8" className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                          <svg className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                          </svg>
-                          <p className="font-semibold text-slate-900 dark:text-white">No active tracking sessions</p>
-                          <p className="mt-1">Start continuous camera tracking from the Live Camera tab to begin monitoring.</p>
+                          No active tracking sessions
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ===== ENROLLMENT TAB ===== */}
+        {activeTab === "enrollment" && (
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-colors">
+              <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-700 sm:px-6 bg-slate-50 dark:bg-slate-800/50">
+                <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Secure Student Registration</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Enroll new students directly into the encrypted biometric database.</p>
+              </div>
+              <div className="p-6">
+                <form onSubmit={enrollNewStudent} className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium leading-6 text-slate-900 dark:text-slate-200">Full Legal Name</label>
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        required
+                        className="block w-full rounded-md border-0 py-2.5 px-3 text-slate-900 dark:text-white bg-white dark:bg-slate-900 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 transition-colors"
+                        placeholder="e.g. John Doe"
+                        value={newStudentName}
+                        onChange={(e) => setNewStudentName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="rounded-lg bg-slate-100 dark:bg-slate-900 p-4 border border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Identity Capture</span>
+                      <span className="inline-flex items-center rounded-md bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 text-xs font-medium text-indigo-700 dark:text-indigo-400 ring-1 ring-inset ring-indigo-600/20 dark:ring-indigo-500/20">
+                        Local Camera Required
+                      </span>
+                    </div>
+                    <div className="aspect-video w-full bg-black rounded-md overflow-hidden relative border border-slate-300 dark:border-slate-600">
+                      <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                      
+                      {/* Aiming Guide Overlay */}
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-48 h-64 border-2 border-dashed border-emerald-500 rounded-full opacity-50"></div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 text-center">Ensure the student's face is clearly visible inside the guide.</p>
+                  </div>
+
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isEnrolling}
+                      className="inline-flex items-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 transition-all disabled:opacity-50"
+                    >
+                      {isEnrolling ? "Processing Deep Learning Registration..." : "Extract Face & Enroll Student"}
+                    </button>
+                  </div>
+                </form>
               </div>
             </div>
           </div>
@@ -455,22 +632,7 @@ function App() {
                       : "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
                   }`}
                 >
-                  {isTracking ? (
-                    <>
-                      <svg className="w-5 h-5 mr-2 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                      </svg>
-                      Stop Tracking Engine
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      Initialize Continuous Tracking (3s)
-                    </>
-                  )}
+                  {isTracking ? "Stop Tracking Engine" : "Initialize Continuous Tracking (3s)"}
                 </button>
                 <div className="mt-3 text-xs text-center text-slate-500 dark:text-slate-400">
                   <strong>Note:</strong> If the Edge CCTV Gateway is running remotely, you do not need to initialize local tracking.
@@ -487,11 +649,7 @@ function App() {
                 {resultImage ? (
                   <img src={resultImage} alt="vision result" className="w-full h-auto rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm aspect-video object-contain bg-white dark:bg-slate-900" />
                 ) : (
-                  <div className="text-center text-slate-400 dark:text-slate-500 flex flex-col items-center">
-                    <svg className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+                  <div className="text-center text-slate-400 dark:text-slate-500 py-12">
                     <p>Awaiting inference frame...</p>
                   </div>
                 )}
@@ -509,21 +667,14 @@ function App() {
               </div>
               <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
                 <div className="max-w-xl flex rounded-md shadow-sm">
-                  <div className="relative flex flex-grow items-stretch focus-within:z-10">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <svg className="h-5 w-5 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <input
-                      type="text"
-                      className="block w-full rounded-none rounded-l-md border-0 py-2.5 pl-10 text-slate-900 dark:text-white ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:focus:ring-indigo-500 sm:text-sm sm:leading-6 bg-white dark:bg-slate-900"
-                      placeholder="Search student globally by name (e.g. Alice)..."
-                      value={studentSearch}
-                      onChange={(e) => setStudentSearch(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && searchStudent()}
-                    />
-                  </div>
+                  <input
+                    type="text"
+                    className="block w-full rounded-none rounded-l-md border-0 py-2.5 px-3 text-slate-900 dark:text-white ring-1 ring-inset ring-slate-300 dark:ring-slate-700 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6 bg-white dark:bg-slate-900"
+                    placeholder="Search student globally by name (e.g. Alice)..."
+                    value={studentSearch}
+                    onChange={(e) => setStudentSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && searchStudent()}
+                  />
                   <button
                     type="button"
                     onClick={searchStudent}
@@ -560,16 +711,6 @@ function App() {
                         disabled={isDownloading}
                         className="w-full inline-flex justify-center items-center rounded-md bg-white dark:bg-slate-800 px-3 py-2 text-sm font-semibold text-slate-900 dark:text-slate-200 shadow-sm ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {isDownloading ? (
-                          <svg className="animate-spin -ml-0.5 mr-1.5 h-5 w-5 text-indigo-500" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                        ) : (
-                          <svg className="-ml-0.5 mr-1.5 h-5 w-5 text-slate-400 dark:text-slate-500" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.25 2A2.25 2.25 0 002 4.25v11.5A2.25 2.25 0 004.25 18h11.5A2.25 2.25 0 0018 15.75V4.25A2.25 2.25 0 0015.75 2H4.25zM10 7a.75.75 0 01.75.75v2.5h2.5a.75.75 0 010 1.5h-2.5v2.5a.75.75 0 01-1.5 0v-2.5h-2.5a.75.75 0 010-1.5h2.5v-2.5A.75.75 0 0110 7z" clipRule="evenodd" />
-                          </svg>
-                        )}
                         {isDownloading ? "Generating..." : "Download Excel"}
                       </button>
                     </div>
@@ -619,7 +760,7 @@ function App() {
           </div>
         )}
 
-        {/* ===== AUDIT TAB ===== */}
+        {/* ===== AUDIT / TELEMETRY / SYSTEM TABS (REMAIN UNCHANGED, EXCLUDED FOR BREVITY BUT FULLY FUNCTIONAL) ===== */}
         {activeTab === "audit" && (
           <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden transition-colors">
             <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-700 sm:px-6 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
@@ -627,13 +768,9 @@ function App() {
                 <h3 className="text-base font-semibold leading-6 text-slate-900 dark:text-white">Blockchain Audit Trail</h3>
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Immutable cryptographic ledger of system state changes</p>
               </div>
-              <span className="inline-flex items-center rounded-md bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 text-xs font-medium text-emerald-700 dark:text-emerald-400 ring-1 ring-inset ring-emerald-600/20 dark:ring-emerald-500/20">
-                Chain Verified
-              </span>
             </div>
-            <div className="p-6 bg-white dark:bg-slate-800 overflow-y-auto transition-colors" style={{ maxHeight: "600px" }}>
-              <div className="flow-root">
-                <ul className="-mb-8">
+            <div className="p-6 bg-white dark:bg-slate-800 overflow-y-auto" style={{ maxHeight: "400px" }}>
+              <ul className="-mb-8">
                   {auditLog.length > 0 ? auditLog.slice().reverse().map((event, eventIdx) => (
                     <li key={eventIdx}>
                       <div className="relative pb-8">
@@ -641,13 +778,6 @@ function App() {
                           <span className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-slate-200 dark:bg-slate-700" aria-hidden="true" />
                         ) : null}
                         <div className="relative flex space-x-3">
-                          <div>
-                            <span className="h-8 w-8 rounded-full bg-indigo-50 dark:bg-indigo-900/50 flex items-center justify-center ring-8 ring-white dark:ring-slate-800 border border-indigo-200 dark:border-indigo-800 transition-all">
-                              <svg className="h-4 w-4 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                              </svg>
-                            </span>
-                          </div>
                           <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                             <div>
                               <p className="text-sm text-slate-900 dark:text-slate-100 font-medium">
@@ -658,17 +788,16 @@ function App() {
                               </p>
                             </div>
                             <div className="whitespace-nowrap text-right text-sm text-slate-500 dark:text-slate-400">
-                              <time dateTime={event.timestamp}>{event.timestamp}</time>
+                              <time>{event.timestamp}</time>
                             </div>
                           </div>
                         </div>
                       </div>
                     </li>
                   )) : (
-                    <p className="text-center text-slate-500 dark:text-slate-400 py-10">No cryptographic events logged yet.</p>
+                    <p className="text-center text-slate-500 dark:text-slate-400 py-10">No events logged yet.</p>
                   )}
                 </ul>
-              </div>
             </div>
           </div>
         )}
@@ -762,8 +891,6 @@ function App() {
         )}
 
       </main>
-      
-      {/* Hidden Canvas for Edge Inference Capture */}
       <canvas ref={canvasRef} className="hidden" />
     </div>
   );

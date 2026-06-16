@@ -7,8 +7,9 @@ EDGE OPTIMIZED: Implements ThreadPoolExecutor for heavy CV tasks
 to ensure the async event loop (and WebSockets) remain unblocked.
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, Depends, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -17,7 +18,7 @@ from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 
-from face_engine import recognize
+from face_engine import recognize, enroll_student
 from attendance_db import (
     update_attendance, export_to_excel, export_student_report,
     get_all_stats, get_student_history, get_all_history,
@@ -35,6 +36,21 @@ from voice_engine import voice_engine
 from fusion import biometric_fusion
 from fed_client import fed_client
 from fed_server import fed_server
+
+# --- API Security Layer ---
+API_KEY_NAME = "X-API-Key"
+API_KEY = os.getenv("API_KEY", "cstpe-mahe-2026-secure")
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+def get_api_key(api_key: str = Security(api_key_header)):
+    if api_key == API_KEY:
+        return api_key
+    raise HTTPException(status_code=403, detail="Could not validate API Key")
+
+# --- Persistent Data Routing ---
+DATA_DIR = os.getenv("DATA_DIR", "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+ENCODING_FILE = os.path.join(DATA_DIR, "encodings.pkl")
 
 app = FastAPI(
     title="CSTPE - Continuous Spatial-Temporal Presence Engine",
@@ -65,8 +81,8 @@ async def startup_attestation():
         elif os.path.exists("yolov8n.pt"):
             models_to_verify["yolov8n"] = "yolov8n.pt"
             
-        if os.path.exists("encodings.pkl"):
-            models_to_verify["face_encodings"] = "encodings.pkl"
+        if os.path.exists(ENCODING_FILE):
+            models_to_verify["face_encodings"] = ENCODING_FILE
 
         if models_to_verify:
             result = verify_all_models(models_to_verify)
@@ -77,6 +93,10 @@ async def startup_attestation():
 # --- Request Models ---
 
 class AttendanceRequest(BaseModel):
+    image: str
+
+class EnrollRequest(BaseModel):
+    student_name: str
     image: str
 
 class PolicyUpdate(BaseModel):
@@ -124,6 +144,7 @@ def home():
 
 @app.websocket("/ws/dashboard")
 async def websocket_endpoint(websocket: WebSocket):
+    # For a real university deployment, WebSockets should also authenticate via token in URL query
     await manager.connect(websocket)
     await websocket.send_json({"type": "init", "data": get_all_stats()})
     try:
@@ -184,10 +205,10 @@ def _cv_pipeline_worker(image_data):
     return students, stats, env_data
 
 
-@app.post("/attendance")
+@app.post("/attendance", dependencies=[Depends(get_api_key)])
 async def attendance(request: AttendanceRequest):
     """
-    Main attendance endpoint.
+    Main attendance endpoint. SECURED.
     Runs the full CSTPE pipeline across all 10 modules asynchronously.
     """
     loop = asyncio.get_event_loop()
@@ -212,11 +233,23 @@ async def attendance(request: AttendanceRequest):
     }
 
 
-@app.post("/recognize")
+@app.post("/recognize", dependencies=[Depends(get_api_key)])
 async def recognize_students(request: AttendanceRequest):
     loop = asyncio.get_event_loop()
     students = await loop.run_in_executor(cv_thread_pool, recognize, request.image)
     return {"students": students}
+
+
+@app.post("/enroll", dependencies=[Depends(get_api_key)])
+def enroll(request: EnrollRequest):
+    """
+    Secure Student Enrollment endpoint.
+    Takes a base64 image and student name, runs face_encodings, and saves to persistent data.
+    """
+    success = enroll_student(request.student_name, base64_image=request.image)
+    if success:
+        return {"status": "success", "message": f"Successfully enrolled {request.student_name} into the biometric database."}
+    return {"status": "error", "message": "No face detected or enrollment failed. Ensure the student is looking directly at the camera."}
 
 
 # =============================================
@@ -249,7 +282,7 @@ def teacher_history(date: str = Query(None)):
     return {"records": get_all_history(date)}
 
 
-@app.post("/teacher/finalize")
+@app.post("/teacher/finalize", dependencies=[Depends(get_api_key)])
 def teacher_finalize_day(class_name: str = Query("General")):
     """
     End-of-day finalization.
@@ -265,7 +298,7 @@ def teacher_finalize_day(class_name: str = Query("General")):
     }
 
 
-@app.post("/reset")
+@app.post("/reset", dependencies=[Depends(get_api_key)])
 def reset_session():
     """Reset the current session tracking for a new class period."""
     reset_db()
@@ -317,7 +350,7 @@ def check_db():
 def get_policy():
     return {"policy": policy.get_all()}
 
-@app.post("/policy")
+@app.post("/policy", dependencies=[Depends(get_api_key)])
 def update_policy(update: PolicyUpdate):
     policy.set_value(update.key, update.value)
     policy.reload()
@@ -365,8 +398,8 @@ def get_attestation():
     elif os.path.exists("yolov8n.pt"):
         models["yolov8n"] = "yolov8n.pt"
         
-    if os.path.exists("encodings.pkl"):
-        models["face_encodings"] = "encodings.pkl"
+    if os.path.exists(ENCODING_FILE):
+        models["face_encodings"] = ENCODING_FILE
     return verify_all_models(models)
 
 # Federated Learning (Feature 7)
@@ -374,7 +407,7 @@ def get_attestation():
 def federated_status():
     return {"client_samples": fed_client.get_sample_count(), "server_status": fed_server.get_status()}
 
-@app.post("/federated/aggregate")
+@app.post("/federated/aggregate", dependencies=[Depends(get_api_key)])
 def federated_aggregate():
     result, message = fed_server.aggregate()
     return {"message": message, "success": result is not None}

@@ -14,7 +14,9 @@ def _custom_load(*args, **kwargs):
     return _original_load(*args, **kwargs)
 torch.load = _custom_load
 
-ENCODING_FILE = "encodings.pkl"
+DATA_DIR = os.getenv("DATA_DIR", "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+ENCODING_FILE = os.path.join(DATA_DIR, "encodings.pkl")
 
 # OPTIMIZATION 1: Load ONNX model for edge inference
 # ONNX is significantly lighter on CPU/RAM than PyTorch.
@@ -37,18 +39,30 @@ def save_encodings(data):
     with open(ENCODING_FILE, "wb") as f:
         pickle.dump(data, f)
 
-def enroll_student(name, image_path):
-    image = face_recognition.load_image_file(image_path)
+def enroll_student(name, image_path=None, base64_image=None):
+    if base64_image:
+        if "," in base64_image:
+            base64_image = base64_image.split(",")[1]
+        image_bytes = base64.b64decode(base64_image)
+        np_array = np.frombuffer(image_bytes, np.uint8)
+        cv_image = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
+        if cv_image is None: return False
+        image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+    elif image_path:
+        image = face_recognition.load_image_file(image_path)
+    else:
+        return False
+        
     faces = face_recognition.face_encodings(image, num_jitters=1)
     if len(faces) == 0:
-        print("No face:", image_path)
+        print("No face detected for enrollment")
         return False
     encodings = load_encodings()
     if name not in encodings:
         encodings[name] = []
     encodings[name].append(faces[0])
     save_encodings(encodings)
-    print("Added:", name, image_path)
+    print("Enrolled:", name)
     return True
 
 def resize_for_edge(image, max_width=1920):

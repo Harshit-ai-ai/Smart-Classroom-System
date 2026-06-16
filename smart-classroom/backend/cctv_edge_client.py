@@ -9,6 +9,7 @@ def main():
     parser = argparse.ArgumentParser(description="CSTPE Edge Gateway - CCTV RTSP Ingestion")
     parser.add_argument("--rtsp", type=str, required=True, help="RTSP URL of the CCTV camera (e.g., rtsp://192.168.1.100:554/stream)")
     parser.add_argument("--api", type=str, required=True, help="URL of the Render API backend (e.g., https://smart-classroom-system-3.onrender.com)")
+    parser.add_argument("--key", type=str, default="cstpe-mahe-2026-secure", help="API Key for the backend (default: cstpe-mahe-2026-secure)")
     parser.add_argument("--interval", type=int, default=3, help="Interval between frames in seconds (default: 3)")
     
     args = parser.parse_args()
@@ -52,8 +53,9 @@ def main():
             print(f"[*] Sending frame to Cloud Engine... ({len(payload) // 1024} KB)")
 
             try:
-                # HTTP POST to the backend
-                res = requests.post(f"{args.api}/attendance", json={"image": payload}, timeout=10)
+                # HTTP POST to the backend with Security Key
+                headers = {"X-API-Key": args.key}
+                res = requests.post(f"{args.api}/attendance", json={"image": payload}, headers=headers, timeout=10)
                 if res.status_code == 200:
                     data = res.json()
                     print(f"  [+] Success: Detected {data.get('count', 0)} students.")
