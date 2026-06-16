@@ -72,17 +72,29 @@ The backend includes a highly optimized Ubuntu-based `Dockerfile` that automatic
 
 ## Enterprise Dashboard & Reporting
 
-The system provides a comprehensive React-based UI for university administrators, professors, and students. It is heavily optimized to handle large datasets.
+The system provides a comprehensive React-based UI for university administrators, professors, and students. It is heavily optimized to handle large datasets and features a fully integrated API security layer.
 
-### 1. Central Administrator & Teacher Dashboard
-The live tracking engine processes camera streams without blocking the asynchronous web server. Teachers can visually track Accumulated Active Presence (AAP) progression.
-![Teacher Camera Tab](docs/screenshots/camera_tab.png)
+### 1. Secure Faculty Authentication
+Access to the CSTPE engine is restricted via an Enterprise Login Portal. Faculty must authenticate using a **MAHE Authorized ID** to unlock the dashboard.
+![Faculty Authentication](docs/screenshots/login.png)
 
-### 2. Student Data Management (10k+ Scale)
+### 2. Central Administrator Dashboard
+The live tracking engine processes camera streams without blocking the asynchronous web server. Teachers can visually track Accumulated Active Presence (AAP) progression and finalize daily reports.
+![Administrator Dashboard](docs/screenshots/dashboard.png)
+
+### 3. High-Res CCTV Edge Gateway
+The system supports wall-mounted 1080p/4K CCTV IP cameras out of the box via an **Edge Gateway Script**. The dashboard dynamically switches between local laptop tracking and passive cloud CCTV monitoring.
+![Live CCTV Integration](docs/screenshots/camera.png)
+
+### 4. Direct Student Enrollment
+Administrators can register new students directly into the deep learning database using the UI. The system extracts facial encodings securely without requiring backend scripts.
+![Student Enrollment](docs/screenshots/enrollment.png)
+
+### 5. Student Data Management (10k+ Scale)
 A dedicated lookup portal allows administrators or students to instantly pull historical attendance records across the entire semester.
-![Student Tab](docs/screenshots/student_tab.png)
+![Student Profile Lookup](docs/screenshots/students.png)
 
-### 3. Multi-Sheet Excel Export Engine
+### 6. Multi-Sheet Excel Export Engine
 Designed for university registrars, the system generates comprehensive official `.xlsx` reports containing:
 1.  **Today's Session:** Active metrics for the current class.
 2.  **Full Attendance History:** Granular chronological logs.
