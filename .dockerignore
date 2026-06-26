@@ -1,0 +1,26 @@
+# Ignore virtual environments
+venv/
+.venv/
+env/
+smart-classroom/backend/venv/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore Node
+node_modules/
+dist/
+
+# Ignore git
+.git/
+.gitignore
+
+# Ignore local PyTorch models if you want to pull ONNX exclusively at runtime 
+# yolov8n.pt
+
+# Ignore IDE files
+.vscode/
+.idea/
