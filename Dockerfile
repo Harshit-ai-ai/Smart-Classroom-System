@@ -10,10 +10,11 @@ RUN apt-get update && apt-get install -y \
     cmake \
     libgl1 \
     libglib2.0-0 \
-    libx11-6 \
+    libx11-dev \
     libxext6 \
     libsm6 \
     libxrender1 \
+    libxcb1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
