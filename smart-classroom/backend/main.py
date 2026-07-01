@@ -14,11 +14,6 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pose_engine import pose_engine
-from engagement_engine import engagement_engine
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades +
-    "haarcascade_frontalface_default.xml"
-)
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
@@ -49,6 +44,11 @@ from voice_engine import voice_engine
 from fusion import biometric_fusion
 from fed_client import fed_client
 from fed_server import fed_server
+from engagement_engine import engagement_engine
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades +
+    "haarcascade_frontalface_default.xml"
+)
 
 # --- API Security Layer ---
 API_KEY_NAME = "X-API-Key"
