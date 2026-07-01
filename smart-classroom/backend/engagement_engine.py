@@ -1,5 +1,6 @@
 import cv2
 
+
 class EngagementEngine:
 
     def detect_gaze(self, face_img):
@@ -12,7 +13,7 @@ class EngagementEngine:
         h, w = gray.shape
 
         eye_region = gray[
-            0:int(h/2),
+            0:int(h / 2),
             :
         ]
 
@@ -57,15 +58,21 @@ class EngagementEngine:
     def attention_score(self, gaze):
 
         scores = {
+
             "CENTER": 1.0,
+
             "LEFT": 0.5,
+
             "RIGHT": 0.5,
+
             "UNKNOWN": 0.2
+
         }
 
         return scores.get(
             gaze,
             0.2
         )
+
 
 engagement_engine = EngagementEngine()

@@ -15,12 +15,17 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from pose_engine import pose_engine
 from engagement_engine import engagement_engine
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades +
+    "haarcascade_frontalface_default.xml"
+)
 import os
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import base64
 import cv2
 import numpy as np
+from attention_engine import attention_engine
 
 from pydantic import BaseModel
 from fastapi.staticfiles import StaticFiles
@@ -201,19 +206,45 @@ def _cv_pipeline_worker(image_data):
         cv2.IMREAD_COLOR
     )
 
+    gaze = "UNKNOWN"
+    attention = 0.2
+
+    if frame is not None:
+
+        gray = cv2.cvtColor(
+            frame,
+            cv2.COLOR_BGR2GRAY
+        )
+
+        faces = face_cascade.detectMultiScale(
+            gray,
+            1.1,
+            5
+        )
+
+        if len(faces):
+
+            x, y, w, h = faces[0]
+
+            face = frame[
+                y:y+h,
+                x:x+w
+            ]
+
+            gaze = engagement_engine.detect_gaze(
+                face
+            )
+
+            attention = engagement_engine.attention_score(
+                gaze
+            )
+
     pose_data = None
 
     if frame is not None:
         pose_data = pose_engine.analyze(
             frame,
             0
-        )
-
-    engagement_score = 0.5
-
-    if pose_data:
-        engagement_score = engagement_engine.compute_score(
-            pose_data
         )
 
     # 3. Multi-modal biometric fusion (Feature 1)
@@ -236,15 +267,20 @@ def _cv_pipeline_worker(image_data):
         if is_feature_enabled("adaptive_gap_threshold"):
             adaptive_gap = entropy_engine.get_adaptive_gap(
                 student,
-                engagement_score
+                attention
             )
 
         metadata[student] = {
+
             "adaptive_gap": adaptive_gap,
+
             "env_valid": env_valid,
+
             "biometric_score": bio_score,
 
-            "engagement_score": engagement_score,
+            "gaze": gaze,
+
+            "attention": attention,
 
             "height": pose_data["height"]
                 if pose_data else None,
